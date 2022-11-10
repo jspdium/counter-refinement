@@ -1,5 +1,5 @@
 
-# Specification refinement of a multithreaded counter
+# Specification refinement of a multithreaded counter in Why3
 
 This is an example inspired by a blog post by Hillel Wayne [https://www.hillelwayne.com/post/refinement/]
 
