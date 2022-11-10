@@ -1,0 +1,114 @@
+
+
+
+
+module Inductiveness
+
+  type world
+
+  val ghost constant initWorld : world 
+
+  val ghost predicate indpred (w:world)
+    ensures { w = initWorld -> result }
+
+  val ghost predicate step (w1:world) (w2:world)
+    ensures  { result -> indpred w1 -> indpred w2 }
+
+
+  (* many steps relation and reachable worlds *)
+
+  inductive step_TR world world =
+  | base : forall w :world. step_TR w w
+  | step : forall w w' w'' : world.
+      step_TR w w' -> step w' w'' -> step_TR w w''
+
+  lemma indpred_manySteps :
+    forall w w' :world. step_TR w w' -> indpred w -> indpred w'
+
+  predicate reachable (w:world) = step_TR initWorld w
+
+  lemma indpred_reachable :
+    forall w :world. reachable w -> indpred w
+
+end
+
+
+
+
+
+module RefinementPlus
+
+  type worldA
+  type worldC
+
+  val ghost function refn (worldC) : worldA
+
+  val ghost constant initWorldA : worldA 
+
+  val ghost constant initWorldC : worldC
+    ensures { refn result = initWorldA }
+
+  val ghost predicate indpredA (w:worldA)
+    ensures { w = initWorldA -> result }
+
+  val ghost predicate indpredC (w:worldC)
+    ensures { w = initWorldC -> result }
+
+  val ghost predicate stepA (w1:worldA) (w2:worldA)
+    ensures  { result -> indpredA w1 -> indpredA w2 }
+
+  (* Refinement of steps from worlds that satisfy the concrete invariant 
+   *)
+  val ghost predicate stepC (w1:worldC) (w2:worldC)
+    ensures { result -> indpredC w1 -> indpredC w2 }
+    ensures { result -> indpredC w1 -> (* indpredC w2 -> *) refn w1 = refn w2 \/ stepA (refn w1) (refn w2) }
+
+
+  (* Reachability -- abstract 
+   *)
+  inductive step_TR_A worldA worldA =
+  | baseA : forall w :worldA. step_TR_A w w
+  | stepA : forall w w' w'' : worldA.
+      step_TR_A w w' -> stepA w' w'' -> step_TR_A w w''
+
+  lemma indpred_manySteps_A :
+    forall w w' :worldA. step_TR_A w w' -> indpredA w -> indpredA w'
+
+  predicate reachableA (w:worldA) = step_TR_A initWorldA w
+
+  lemma indpred_reachable_A :
+    forall w :worldA. reachableA w -> indpredA w
+
+
+  (* Reachability -- concrete 
+   *)
+  inductive step_TR_C worldC worldC =
+  | baseC : forall w :worldC. step_TR_C w w
+  | stepC : forall w w' w'' : worldC.
+      step_TR_C w w' -> stepC w' w'' -> step_TR_C w w''
+
+  lemma indpred_manySteps_C :
+    forall w w' :worldC. step_TR_C w w' -> indpredC w -> indpredC w'
+
+  predicate reachableC (w:worldC) = step_TR_C initWorldC w
+
+  (* lemma indpred_reachable_C : *)
+  (*   forall w :worldC. reachableC w -> indpredC w *)
+
+
+  (* reachable worlds are abstracted to reachable worlds 
+   *) 
+  lemma reachable : forall w :worldC. reachableC w -> reachableA (refn w)
+
+
+  (* and abstract invariant holds in such worlds 
+   *)
+  lemma invariance_refn : forall w :worldC. reachableC w -> indpredA (refn w)
+
+
+
+end
+
+
+
+

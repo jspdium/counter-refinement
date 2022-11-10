@@ -1,0 +1,59 @@
+
+
+(* Abstract specification of a counter, using atomic updates 
+ *) 
+
+module Abstract
+
+  use export int.Int
+  use export map.Map
+  use export map.Const
+
+  type state = Start | Done
+  type thread 
+
+  type world = (map thread state, int)
+  function pc (w:world)  : map thread state = let (pc,_) = w in pc
+  function counter (w:world) : int = let (_,c) = w in c
+
+
+
+  (* inductive invariant 
+   *)
+  predicate inv (w:world) = counter w >= 0
+
+  let ghost predicate indpred (w:world) = inv w 
+
+
+  (* Initial configuration
+   *) 
+  let ghost constant initWorld : world = (const Start, 0)
+
+  predicate trans_enbld (w:world) (t:thread) = 
+    get (pc w) t = Start
+ 
+  let ghost function trans (w:world) (t:thread) : world
+    requires { trans_enbld w t }
+  = (set (pc w) t Done, counter w+1) 
+
+
+
+
+  (* Transition SEMANTICS 
+   *)
+  inductive stepind world world =
+  | trans : forall w :world, t :thread.
+      trans_enbld w t -> stepind w  (trans w t )
+
+  let ghost predicate step (w1:world) (w2:world) = stepind w1 w2 
+
+
+  (* proof of inductiveness 
+   *)
+  clone export core.Inductiveness with val initWorld, val step, val indpred, type world
+
+  lemma safety : forall w :world. reachable w -> inv w
+
+
+end
+

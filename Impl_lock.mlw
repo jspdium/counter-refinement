@@ -1,0 +1,149 @@
+
+
+
+(* Implementation of Abstract counter spec without atomic updates,
+   using local counters and a lock *)
+
+module Impl
+
+  use export int.Int
+  use export map.Map
+  use export map.Const
+
+  type state = Start | Inc | Done
+  type thread 
+  type lock = Unlocked | Locked thread
+
+  type world = (map thread state, int, map thread int, lock)
+  function pc (w:world) : map thread state = let (pc,_,_,_) = w in pc
+  function counter (w:world) : int = let (_,c,_,_) = w in c
+  function tmp (w:world)  : map thread int = let (_,_,tmp,_) = w in tmp
+  function lock (w:world) : lock = let (_,_,_,l) = w in l
+  
+
+
+  (* inductive invariant 
+   *)
+  predicate inv (w:world) =
+    (forall t :thread. lock w = Locked t -> get (tmp w) t = counter w)
+    
+  let ghost predicate indpred (w:world) = inv w 
+
+
+
+  (* ALGORITHM *)
+
+  (* Initial configuration -- unlocked; local counters at 0
+   *) 
+  let ghost constant initWorld : world = (const Start, 0, const 0, Unlocked)
+
+
+  (* If in Start state and unlocked: copy global counter to local; lock and move into Inc State
+   *)
+  predicate transSI_enbld (w:world) (t:thread) = 
+    get (pc w) t = Start
+    /\ 
+    lock w = Unlocked
+ 
+  let ghost function transSI (w:world) (t:thread)  : world
+    requires { transSI_enbld w t }
+  = (set (pc w) t Inc, counter w, set (tmp w) t (counter w), Locked t) 
+
+
+  (* If in Inc state and thread owns lock: set global counter as local+1; lock and move into Done
+   *)
+  predicate transID_enbld (w:world) (t:thread)  = 
+    get (pc w) t = Inc
+    /\ 
+    lock w = Locked t 
+ 
+  let ghost function transID (w:world) (t:thread) : world
+    requires { transID_enbld w t }
+    requires { inv w }
+    ensures  { counter result = counter w + 1 }    
+  = (set (pc w) t Done, get (tmp w) t + 1, tmp w, Unlocked)
+
+
+
+
+  (* Transition SEMANTICS *)
+
+  inductive stepind world world =
+  | trans_SI : forall w :world, t :thread.
+      transSI_enbld w t -> stepind w  (transSI w  t)
+  | trans_ID : forall w :world, t :thread.
+      transID_enbld w t -> stepind w  (transID w  t)
+
+  let ghost predicate step (w1:world) (w2:world) = stepind w1 w2 
+
+  clone export core.Inductiveness with val initWorld, val step, val indpred, type world
+
+  lemma safety : forall w :world. reachable w -> inv w
+
+
+end
+
+
+
+
+module ImplRefinesAbstract
+
+  type thread 
+
+  clone Abstract.Abstract with type thread
+
+  clone Impl with type thread
+
+
+  (* refinement mapping: Inc state is mapped to Start at abstract level
+   *) 
+  function mapState (s :Impl.state) : Abstract.state =
+  match s with
+  | Start -> Abstract.Start
+  | Inc   -> Abstract.Start
+  | Done  -> Abstract.Done
+  end
+
+  function mapStates (m: map thread Impl.state) : map thread Abstract.state =
+    fun t -> mapState (get m t)  
+  
+  let ghost function refn (w:Impl.world) : Abstract.world
+  = (mapStates (pc w), counter w)
+
+
+
+
+  (* Refinement lemmas - in this simple example they are not really required
+     transSI transitions remain in abstract Start level;
+     transID transitions correspond to abstract transitions
+   *)
+
+  (* let lemma transSI_rfn (w:world) (t:thread) *)
+  (*   requires { transSI_enbld w t } *)
+  (*   requires { inv w }  *)
+  (*   ensures  { refn (transSI w t) = refn w } *)
+  (* = () *)
+
+  (* let lemma transID_rfn (w:world) (t:thread) *)
+  (*   requires { transID_enbld w t } *)
+  (*   requires { inv w }  *)
+  (*   ensures  { refn (transID w t) = Abstract.trans (refn w) t } *)
+  (* = () *)
+
+
+
+  (* Impl refines Abstract
+   *) 
+  clone core.RefinementPlus with type worldC=Impl.world, type worldA=Abstract.world, val refn,
+		      	    	 val indpredC=Impl.indpred, val indpredA=Abstract.indpred,
+			    	 val initWorldC=Impl.initWorld, val initWorldA=Abstract.initWorld,
+   		            	 val stepC=Impl.step, val stepA=Abstract.step
+
+
+   (* In addition to the refinement result, we can also prove that 
+      the abstract invariant holds in all concrete reachable configurations
+    *)
+  lemma safety_by_refinement : forall w :Impl.world. reachableC w -> Abstract.indpred (refn w)
+
+end 
+
